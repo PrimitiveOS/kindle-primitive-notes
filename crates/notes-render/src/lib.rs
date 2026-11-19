@@ -156,7 +156,8 @@ impl View {
         header(canvas, "Primitive Notes", "Done");
         let query = self.search.string();
         let box_ = Self::rect(40, 170, 824, 100);
-        canvas.card(box_);
+        let pressed = canvas.control_pressed(box_, false);
+        canvas.panel(box_, 22, 2, if pressed { 220 } else { 255 });
         canvas.text(
             box_.inset(18),
             if query.is_empty() {
@@ -177,7 +178,8 @@ impl View {
         {
             found = true;
             let row = Self::rect(40, 304 + i as i32 * 126, 1184, 112);
-            canvas.card(row);
+            let pressed = canvas.control_pressed(row, false);
+            canvas.panel(row, 22, 2, if pressed { 220 } else { 255 });
             let title = if note.pinned {
                 format!("Pinned · {}", note.title())
             } else {
