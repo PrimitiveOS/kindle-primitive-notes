@@ -38,8 +38,9 @@ Copy the `notes` and `documents` folders from the local ARMHF package to your Ki
 
 ## Status
 
-Desktop simulation and local ARMHF package checks passed on the Mac. Oasis 3 testing, including USB eject and sleep
-and wake, is pending. [Device notes](docs/device-notes.md)
+Desktop simulation and local ARMHF package checks passed on the Mac. On an ARMHF Kindle Oasis 3 running firmware
+5.18.2, Notes opened from Launcher, opened and dismissed the search keyboard, and returned to Launcher.
+USB eject and sleep and wake checks are pending. [Device notes](docs/device-notes.md)
 
 ## Develop locally
 
