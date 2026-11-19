@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "primitive-notes",
+  "dir": "notes",
+  "name": "Primitive Notes",
+  "subtitle": "Write and find plain-text notes",
+  "developer": { "name": "Primitive AI" },
+  "categories": ["productivity"],
+  "description": "Write, pin and search notes stored as plain text on your Kindle.",
+  "repo": "https://github.com/DoanNguyenTrong/kindle-primitive-notes",
+  "licence": "PolyForm-Noncommercial-1.0.0",
+  "source": "hosted",
+  "icon": "icon.png",
+  "changes": { "network": false, "stops_kindle_ui": false, "starts_at_boot": false, "root_filesystem": false, "hooks": false },
+  "versions": []
+}
