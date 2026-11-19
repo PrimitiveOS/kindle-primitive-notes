@@ -33,8 +33,8 @@ a UTF-8 text file in `/mnt/us/notes/`, ready to copy over USB.
 
 ## Quick start
 
-Copy the `notes` and `documents` folders from the local ARMHF package to your Kindle over USB, then eject and open
-**Notes** from Primitive Launcher. The app uses the fonts installed by Launcher. [Install guide](INSTALL.md)
+After setting up PrimitiveOS, open **Store** from Primitive Launcher. Choose **Notes** under **Apps**,
+tap **Get**, and open it from the Launcher grid. The [install guide](INSTALL.md) also covers local USB testing.
 
 ## Status
 
