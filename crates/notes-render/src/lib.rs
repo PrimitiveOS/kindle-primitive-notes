@@ -137,6 +137,21 @@ impl View {
         }
     }
 
+    fn notice(&self) -> &str {
+        if self.notes.has_pending_directory_sync() {
+            "Storage sync is pending. Your changes are still visible."
+        } else {
+            &self.notice
+        }
+    }
+
+    fn save_editor(&mut self) -> io::Result<()> {
+        if let Some((file, editor)) = &self.open {
+            with_storage(|| self.notes.edit(file, editor.editor.string()))?;
+        }
+        Ok(())
+    }
+
     fn draw_list(&self, canvas: &mut Canvas) {
         header(canvas, "Primitive Notes", "Done");
         let query = self.search.string();
@@ -194,7 +209,7 @@ impl View {
             if self.notes.can_undo() {
                 canvas.button(Self::rect(390, 1325, 484, 100), "Undo delete", false, false);
             }
-            canvas.text(Self::rect(40, 1595, 1184, 68), &self.notice, CAPTION);
+            canvas.text(Self::rect(40, 1595, 1184, 68), self.notice(), CAPTION);
         }
     }
 
@@ -222,12 +237,12 @@ impl View {
         editor.draw(canvas, area, COLUMN_COUNT, LINE_HEIGHT, NOTE_SIZE);
         self.measure_lines(canvas, editor, area);
         if self.editing {
-            canvas.text(Self::rect(40, 896, 1184, 50), &self.notice, CAPTION);
+            canvas.text(Self::rect(40, 896, 1184, 50), self.notice(), CAPTION);
             canvas.keyboard(editor.editor.layer, "Return", None);
         } else {
             canvas.button(Self::rect(40, 1470, 270, 100), "Previous", false, false);
             canvas.button(Self::rect(954, 1470, 270, 100), "Next", false, false);
-            canvas.text(Self::rect(40, 1595, 1184, 68), &self.notice, CAPTION);
+            canvas.text(Self::rect(40, 1595, 1184, 68), self.notice(), CAPTION);
         }
         if self.confirm_delete {
             let box_ = Self::rect(200, 570, 864, 440);
@@ -328,7 +343,7 @@ impl View {
     fn note_tap(&mut self, x: f32, y: f32) -> Change {
         if self.confirm_delete {
             if Self::rect(664, 863, 350, 100).contains(x, y) {
-                let result = self.save();
+                let result = self.save_editor();
                 if !self.report(result) {
                     self.confirm_delete = false;
                     return Change::Full;
@@ -350,7 +365,7 @@ impl View {
             return Change::Full;
         }
         if back_button(1264).contains(x, y) {
-            let result = self.save();
+            let result = self.save_editor();
             if self.report(result) {
                 self.open = None;
                 self.editing = false;
@@ -405,7 +420,7 @@ impl View {
         let pressed = editor.press(key);
         editor.show_caret(COLUMN_COUNT, (area.h / LINE_HEIGHT) as usize);
         if pressed == Press::Edited {
-            let result = self.save();
+            let result = self.save_editor();
             if self.report(result) {
                 self.notice.clear();
             }
@@ -445,8 +460,9 @@ impl App for View {
     }
 
     fn save(&mut self) -> io::Result<()> {
-        if let Some((file, editor)) = &self.open {
-            with_storage(|| self.notes.edit(file, editor.editor.string()))?;
+        self.save_editor()?;
+        if self.notes.has_pending_directory_sync() {
+            with_storage(|| self.notes.sync_pending_directory())?;
         }
         Ok(())
     }
@@ -473,6 +489,7 @@ impl App for View {
                 }
             }
             self.notes = fresh;
+            let _ = self.notes.sync_pending_directory();
             self.page = 0;
             Ok(())
         });

@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
-use std::fs::{self, OpenOptions};
-use std::io;
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -26,6 +26,9 @@ pub struct Notes {
     dir: PathBuf,
     entries: Vec<Note>,
     deleted: Option<Note>,
+    needs_directory_sync: bool,
+    #[cfg(test)]
+    directory_sync: fn(&Path) -> io::Result<()>,
 }
 
 fn is_note(name: &str) -> bool {
@@ -33,7 +36,6 @@ fn is_note(name: &str) -> bool {
 }
 
 fn replace(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    use std::io::Write;
     let file = path.file_name().unwrap().to_string_lossy();
     let tmp = path.with_file_name(format!(".{file}.tmp"));
     let mut output = OpenOptions::new()
@@ -45,6 +47,20 @@ fn replace(path: &Path, bytes: &[u8]) -> io::Result<()> {
     output.sync_all()?;
     drop(output);
     fs::rename(tmp, path)
+}
+
+fn create_file(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let mut output = OpenOptions::new().write(true).create_new(true).open(path)?;
+    let result = output.write_all(bytes).and_then(|()| output.sync_all());
+    drop(output);
+    if result.is_err() {
+        let _ = fs::remove_file(path);
+    }
+    result
+}
+
+fn sync_directory(directory: &Path) -> io::Result<()> {
+    File::open(directory)?.sync_all()
 }
 
 impl Notes {
@@ -80,6 +96,9 @@ impl Notes {
             dir,
             entries,
             deleted: None,
+            needs_directory_sync: false,
+            #[cfg(test)]
+            directory_sync: sync_directory,
         };
         notes.sort();
         Ok(notes)
@@ -102,7 +121,34 @@ impl Notes {
             .deleted
             .clone()
             .filter(|note| fresh.note(&note.file).is_none());
+        fresh.needs_directory_sync = self.needs_directory_sync;
+        #[cfg(test)]
+        {
+            fresh.directory_sync = self.directory_sync;
+        }
         Ok(fresh)
+    }
+
+    pub fn has_pending_directory_sync(&self) -> bool {
+        self.needs_directory_sync
+    }
+
+    /// Retry a directory flush after a visible change whose durability could not be confirmed.
+    pub fn sync_pending_directory(&mut self) -> io::Result<()> {
+        if self.needs_directory_sync {
+            #[cfg(not(test))]
+            sync_directory(&self.dir)?;
+            #[cfg(test)]
+            (self.directory_sync)(&self.dir)?;
+            self.needs_directory_sync = false;
+        }
+        Ok(())
+    }
+
+    fn directory_changed(&mut self) {
+        self.needs_directory_sync = true;
+        // The change is already visible. Keep the note state and retry a failed flush separately.
+        let _ = self.sync_pending_directory();
     }
 
     fn sort(&mut self) {
@@ -119,25 +165,13 @@ impl Notes {
     }
 
     pub fn create_text(&mut self, text: String) -> io::Result<String> {
-        use std::io::Write;
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
         let file = format!("note-{timestamp}.txt");
         let path = self.dir.join(&file);
-        let mut output = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)?;
-        if let Err(error) = output
-            .write_all(text.as_bytes())
-            .and_then(|()| output.sync_all())
-        {
-            drop(output);
-            let _ = fs::remove_file(path);
-            return Err(error);
-        }
+        create_file(&path, text.as_bytes())?;
         self.entries.push(Note {
             file: file.clone(),
             text,
@@ -145,6 +179,7 @@ impl Notes {
             modified: SystemTime::now(),
         });
         self.sort();
+        self.directory_changed();
         Ok(file)
     }
 
@@ -166,6 +201,7 @@ impl Notes {
             note.text = text;
             note.modified = SystemTime::now();
             self.sort();
+            self.directory_changed();
         }
         Ok(())
     }
@@ -178,6 +214,7 @@ impl Notes {
         let pins = self
             .entries
             .iter()
+            .chain(self.deleted.iter())
             .filter(|note| {
                 if note.file == file {
                     pinned
@@ -193,6 +230,7 @@ impl Notes {
             note.pinned = pinned;
         }
         self.sort();
+        self.directory_changed();
         Ok(())
     }
 
@@ -204,6 +242,7 @@ impl Notes {
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "note is gone"))?;
         fs::remove_file(self.dir.join(file))?;
         self.deleted = Some(self.entries.remove(index));
+        self.directory_changed();
         Ok(())
     }
 
@@ -212,25 +251,14 @@ impl Notes {
     }
 
     pub fn undo(&mut self) -> io::Result<()> {
-        use std::io::Write;
         let Some(note) = &self.deleted else {
             return Ok(());
         };
         let path = self.dir.join(&note.file);
-        let mut output = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)?;
-        if let Err(error) = output
-            .write_all(note.text.as_bytes())
-            .and_then(|()| output.sync_all())
-        {
-            drop(output);
-            let _ = fs::remove_file(path);
-            return Err(error);
-        }
+        create_file(&path, note.text.as_bytes())?;
         self.entries.push(self.deleted.take().unwrap());
         self.sort();
+        self.directory_changed();
         Ok(())
     }
 }
@@ -255,11 +283,65 @@ mod tests {
         assert_eq!(note.title(), "Hẹn gặp");
         reloaded.delete(&file).unwrap();
         assert!(!dir.join(&file).exists());
+        let other = reloaded.create_text("Another note".into()).unwrap();
+        reloaded.toggle_pin(&other).unwrap();
         reloaded.undo().unwrap();
         assert_eq!(
-            fs::read_to_string(dir.join(file)).unwrap(),
+            fs::read_to_string(dir.join(&file)).unwrap(),
             "Hẹn gặp\nStudy Vietnamese"
         );
+        let reloaded = Notes::open(dir.clone()).unwrap();
+        assert!(reloaded.note(&file).unwrap().pinned);
+        assert!(reloaded.note(&other).unwrap().pinned);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn directory_sync_failure_preserves_visible_changes_and_can_be_retried() {
+        fn fail_directory_sync(_: &Path) -> io::Result<()> {
+            Err(io::Error::other("simulated directory sync failure"))
+        }
+
+        fn check_and_rearm(notes: &mut Notes) {
+            assert!(notes.has_pending_directory_sync());
+            assert!(notes.sync_pending_directory().is_err());
+            notes.directory_sync = sync_directory;
+            notes.sync_pending_directory().unwrap();
+            assert!(!notes.has_pending_directory_sync());
+            notes.directory_sync = fail_directory_sync;
+        }
+
+        let dir = std::env::temp_dir().join(format!("primitive-notes-sync-{}", std::process::id()));
+        let mut notes = Notes::open(dir.clone()).unwrap();
+        notes.directory_sync = fail_directory_sync;
+
+        let file = notes.create_text("First".into()).unwrap();
+        assert_eq!(notes.note(&file).unwrap().text, "First");
+        assert_eq!(fs::read_to_string(dir.join(&file)).unwrap(), "First");
+        check_and_rearm(&mut notes);
+
+        notes.edit(&file, "Edited".into()).unwrap();
+        assert_eq!(notes.note(&file).unwrap().text, "Edited");
+        assert_eq!(fs::read_to_string(dir.join(&file)).unwrap(), "Edited");
+        check_and_rearm(&mut notes);
+
+        notes.toggle_pin(&file).unwrap();
+        assert!(notes.note(&file).unwrap().pinned);
+        assert_eq!(fs::read_to_string(dir.join(".pins")).unwrap(), file);
+        check_and_rearm(&mut notes);
+
+        notes.delete(&file).unwrap();
+        assert!(notes.note(&file).is_none());
+        assert!(notes.can_undo());
+        assert!(!dir.join(&file).exists());
+        notes = notes.refreshed().unwrap();
+        check_and_rearm(&mut notes);
+
+        notes.undo().unwrap();
+        assert!(notes.note(&file).unwrap().pinned);
+        assert!(!notes.can_undo());
+        assert_eq!(fs::read_to_string(dir.join(&file)).unwrap(), "Edited");
+        check_and_rearm(&mut notes);
         fs::remove_dir_all(dir).unwrap();
     }
 }
