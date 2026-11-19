@@ -11,7 +11,7 @@
 ---
 
 Write notes with the on-screen keyboard, search their contents, and pin the ones you use most. Each note is stored as
-a UTF-8 text file in `/mnt/us/notes/`, ready to copy over USB.
+a UTF-8 text file in `/mnt/us/notes/`, ready to copy over USB. Open **Templates** to start a checklist or reading journal.
 
 ## Screenshots
 
@@ -20,6 +20,10 @@ a UTF-8 text file in `/mnt/us/notes/`, ready to copy over USB.
     <td align="center"><img src="docs/images/notes-list.png" alt="Notes list with search, a new note button, and a sample market list" width="260"><br><sub>Notes list and search</sub></td>
     <td align="center"><img src="docs/images/notes-edit.png" alt="Editing a market list with the Kindle keyboard" width="260"><br><sub>Editing a note</sub></td>
     <td align="center"><img src="docs/images/notes-edit-dark.png" alt="The note editor and keyboard in dark mode" width="260"><br><sub>Dark mode</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/notes-checklist.png" alt="Checklist with a checked item and controls to move the selected item" width="260"></td>
+    <td align="center"><img src="docs/images/notes-reading-journal-dark.png" alt="A reading journal with book, page, quote, and takeaway in dark mode" width="260"></td>
   </tr>
 </table>
 
@@ -31,6 +35,14 @@ a UTF-8 text file in `/mnt/us/notes/`, ready to copy over USB.
 - Every edit is saved. Delete offers Undo from the notes list.
 - With a matching Launcher, Notes refreshes the folder after USB eject and preserves conflicting drafts as separate notes.
 
+## Checklists and reading journals
+
+- Open **Templates** and choose **Checklist** to start a list. Notes also detects rows marked with `- [ ]` or `- [x]`
+  in existing text files.
+- Tap a checkbox to finish an item. Tap its label to select it, then choose **Move up** or **Move down**. **Edit text**
+  opens the normal editor so you can write freely.
+- Choose **Reading journal** for a note with Book, Page, Quote and Takeaway fields.
+
 ## Quick start
 
 After setting up PrimitiveOS, open **Store** from Primitive Launcher. Choose **Notes** under **Apps**,
@@ -38,7 +50,7 @@ tap **Get**, and open it from the Launcher grid. The [install guide](INSTALL.md)
 
 ## Status
 
-Desktop simulation and local ARMHF package checks passed on the Mac. On an ARMHF Kindle Oasis 3 running firmware
+Version 0.1.1 passed desktop simulation and local ARMHF package checks on the Mac. Version 0.1.0 was checked on an ARMHF Kindle Oasis 3 running firmware
 5.18.2, Notes opened from Launcher, opened and dismissed the search keyboard, and returned to Launcher.
 USB eject and sleep and wake checks are pending. [Device notes](docs/device-notes.md)
 

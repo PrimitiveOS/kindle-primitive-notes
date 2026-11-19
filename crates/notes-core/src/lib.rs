@@ -1,3 +1,5 @@
+pub mod checklist;
+
 use std::collections::BTreeSet;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};

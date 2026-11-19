@@ -598,11 +598,11 @@ dependencies = [
 
 [[package]]
 name = "notes-core"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "notes-desktop"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "notes-core",
  "notes-render",
@@ -612,7 +612,7 @@ dependencies = [
 
 [[package]]
 name = "notes-kindle"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "notes-core",
  "notes-render",
@@ -621,7 +621,7 @@ dependencies = [
 
 [[package]]
 name = "notes-render"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "notes-core",
  "primitive-app",

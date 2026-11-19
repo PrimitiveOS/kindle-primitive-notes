@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::io;
 
-use notes_core::Notes;
+use notes_core::{checklist, Notes};
 use primitive_app::{with_storage, App, Change};
 use primitive_ui::{
     back_button, header, keyboard_key, screen_rect, Canvas, Editor, Input, Layout, Press, Rect,
@@ -12,6 +12,8 @@ const COLUMN_COUNT: usize = 31;
 const LINE_HEIGHT: i32 = 54;
 const BODY_TOP: i32 = 250;
 const NOTE_SIZE: i32 = 38;
+const NOTE_LIMIT: usize = 100_000;
+const CHECKLIST_ROWS: usize = 6;
 
 #[derive(Default)]
 struct HitLine {
@@ -22,6 +24,10 @@ struct HitLine {
 pub struct View {
     pub notes: Notes,
     open: Option<(String, primitive_ui::editor::Multiline)>,
+    templates: bool,
+    checklist: bool,
+    checklist_page: usize,
+    selected_item: Option<usize>,
     search: Editor,
     search_active: bool,
     editing: bool,
@@ -36,6 +42,10 @@ impl View {
         Self {
             notes,
             open: None,
+            templates: false,
+            checklist: false,
+            checklist_page: 0,
+            selected_item: None,
             search: Editor::new(120),
             search_active: false,
             editing: false,
@@ -66,10 +76,14 @@ impl View {
         if let Some(note) = self.notes.note(&file) {
             self.open = Some((
                 file,
-                primitive_ui::editor::Multiline::new(&note.text, 100_000),
+                primitive_ui::editor::Multiline::new(&note.text, NOTE_LIMIT),
             ));
             self.search_active = false;
-            self.editing = true;
+            self.templates = false;
+            self.checklist = !checklist::items(&note.text).is_empty();
+            self.checklist_page = 0;
+            self.selected_item = None;
+            self.editing = !self.checklist;
             self.notice.clear();
             self.hit_lines.get_mut().clear();
             Change::Full
@@ -208,6 +222,7 @@ impl View {
                 CAPTION.center(),
             );
             canvas.button(Self::rect(954, 1470, 270, 100), "Next", false, false);
+            canvas.button(Self::rect(40, 1325, 328, 100), "Templates", false, false);
             if self.notes.can_undo() {
                 canvas.button(Self::rect(390, 1325, 484, 100), "Undo delete", false, false);
             }
@@ -225,6 +240,13 @@ impl View {
             false,
         );
         canvas.button(Self::rect(302, 140, 240, 100), "Delete", false, false);
+        if self
+            .notes
+            .note(file)
+            .is_some_and(|note| !checklist::items(&note.text).is_empty())
+        {
+            canvas.button(Self::rect(552, 140, 220, 100), "Checklist", false, false);
+        }
         canvas.button(
             Self::rect(790, 140, 434, 100),
             if self.editing {
@@ -262,6 +284,243 @@ impl View {
             canvas.button(Self::rect(250, 863, 350, 100), "Cancel", false, false);
             canvas.button(Self::rect(664, 863, 350, 100), "Delete", true, false);
         }
+    }
+
+    fn draw_templates(&self, canvas: &mut Canvas) {
+        header(canvas, "Templates", "Back");
+        canvas.button(Self::rect(40, 250, 1184, 120), "Checklist", true, false);
+        canvas.text(
+            Self::rect(40, 384, 1184, 70),
+            "Check items off and change their order.",
+            CAPTION,
+        );
+        canvas.button(
+            Self::rect(40, 470, 1184, 120),
+            "Reading journal",
+            false,
+            false,
+        );
+        canvas.text(
+            Self::rect(40, 604, 1184, 70),
+            "Keep a quote and what you took from it.",
+            CAPTION,
+        );
+        canvas.text(Self::rect(40, 1595, 1184, 68), self.notice(), CAPTION);
+    }
+
+    fn template_tap(&mut self, x: f32, y: f32) -> Change {
+        if back_button(1264).contains(x, y) {
+            self.templates = false;
+            return Change::Full;
+        }
+        let text = if Self::rect(40, 250, 1184, 120).contains(x, y) {
+            checklist::CHECKLIST_TEMPLATE
+        } else if Self::rect(40, 470, 1184, 120).contains(x, y) {
+            checklist::READING_JOURNAL_TEMPLATE
+        } else {
+            return Change::None;
+        };
+        match with_storage(|| self.notes.create_text(text.into())) {
+            Ok(file) => {
+                let change = self.view_note(file);
+                if text == checklist::CHECKLIST_TEMPLATE {
+                    self.edit_item_at_end();
+                }
+                change
+            }
+            Err(error) => {
+                self.report(Err(error));
+                Change::Partial
+            }
+        }
+    }
+
+    fn checklist_row(row: usize) -> Rect {
+        Self::rect(40, 304 + row as i32 * 151, 1184, 124)
+    }
+
+    fn draw_checklist(&self, canvas: &mut Canvas, file: &str) {
+        let Some(note) = self.notes.note(file) else {
+            return;
+        };
+        header(canvas, "Checklist", "Back");
+        canvas.button(Self::rect(40, 140, 568, 100), "Add item", true, false);
+        canvas.button(Self::rect(656, 140, 568, 100), "Edit text", false, false);
+        canvas.text(Self::rect(40, 252, 1184, 48), note.title(), CAPTION);
+        let items = checklist::items(&note.text);
+        for (index, item) in items
+            .iter()
+            .enumerate()
+            .skip(self.checklist_page * CHECKLIST_ROWS)
+            .take(CHECKLIST_ROWS)
+        {
+            let row = Self::checklist_row(index % CHECKLIST_ROWS);
+            let selected = self.selected_item == Some(index);
+            canvas.panel(row, 22, if selected { 4 } else { 2 }, 255);
+            canvas.button(
+                Rect::new(row.x + 10, row.y + 10, 104, 104),
+                if item.checked { "X" } else { "" },
+                item.checked,
+                false,
+            );
+            let label = if item.label.is_empty() {
+                "New item"
+            } else {
+                item.label
+            };
+            let text = Rect::new(row.x + 138, row.y + 18, row.w - 150, row.h - 36);
+            let pressed = canvas.control_pressed(text, false);
+            if pressed {
+                canvas.panel(text, 16, 2, 220);
+            }
+            canvas.text(text.inset(10), label, BODY.lines(2));
+        }
+        if let Some(index) = self.selected_item {
+            if index > 0 {
+                canvas.button(Self::rect(40, 1240, 568, 100), "Move up", false, false);
+            }
+            if index + 1 < items.len() {
+                canvas.button(Self::rect(656, 1240, 568, 100), "Move down", false, false);
+            }
+        } else {
+            canvas.text(
+                Self::rect(40, 1250, 1184, 62),
+                "Tap an item to move it.",
+                CAPTION,
+            );
+        }
+        if self.checklist_page > 0 {
+            canvas.button(Self::rect(40, 1470, 270, 100), "Previous", false, false);
+        }
+        if (self.checklist_page + 1) * CHECKLIST_ROWS < items.len() {
+            canvas.button(Self::rect(954, 1470, 270, 100), "Next", false, false);
+        }
+        canvas.text(Self::rect(40, 1595, 1184, 68), self.notice(), CAPTION);
+    }
+
+    fn checklist_page(&mut self, delta: isize) -> Change {
+        let count = self
+            .open
+            .as_ref()
+            .and_then(|(file, _)| self.notes.note(file))
+            .map_or(0, |note| checklist::items(&note.text).len());
+        let next = self
+            .checklist_page
+            .saturating_add_signed(delta)
+            .min(count.div_ceil(CHECKLIST_ROWS).saturating_sub(1));
+        if next == self.checklist_page {
+            return Change::None;
+        }
+        self.checklist_page = next;
+        self.selected_item = None;
+        Change::Partial
+    }
+
+    fn save_checklist(&mut self, text: String) -> bool {
+        let Some((file, editor)) = &mut self.open else {
+            return false;
+        };
+        let result = with_storage(|| self.notes.edit(file, text.clone()));
+        if result.is_ok() {
+            *editor = primitive_ui::editor::Multiline::new(&text, NOTE_LIMIT);
+            self.hit_lines.get_mut().clear();
+            self.notice.clear();
+        }
+        self.report(result)
+    }
+
+    fn edit_item_at_end(&mut self) {
+        if let Some((_, editor)) = &mut self.open {
+            self.checklist = false;
+            self.editing = true;
+            editor.editor.caret = editor.editor.text.len();
+            editor.show_caret(COLUMN_COUNT, (648 / LINE_HEIGHT) as usize);
+        }
+    }
+
+    fn checklist_tap(&mut self, x: f32, y: f32) -> Change {
+        if back_button(1264).contains(x, y) {
+            self.open = None;
+            self.checklist = false;
+            self.notice.clear();
+            return Change::Full;
+        }
+        let Some((file, _)) = self.open.as_ref() else {
+            return Change::None;
+        };
+        let Some(note) = self.notes.note(file) else {
+            return Change::None;
+        };
+        if Self::rect(656, 140, 568, 100).contains(x, y) {
+            self.checklist = false;
+            self.editing = true;
+            return Change::Full;
+        }
+        if Self::rect(40, 140, 568, 100).contains(x, y) {
+            let ending = if note.text.contains("\r\n") {
+                "\r\n"
+            } else {
+                "\n"
+            };
+            let mut text = note.text.clone();
+            if !text.ends_with('\n') {
+                text.push_str(ending);
+            }
+            text.push_str("- [ ] ");
+            if text.chars().count() >= NOTE_LIMIT {
+                self.notice = "This note is too long to add another item.".into();
+                return Change::Partial;
+            }
+            if !self.save_checklist(text) {
+                return Change::Partial;
+            }
+            self.edit_item_at_end();
+            return Change::Full;
+        }
+        if Self::rect(40, 1470, 270, 100).contains(x, y) {
+            return self.checklist_page(-1);
+        }
+        if Self::rect(954, 1470, 270, 100).contains(x, y) {
+            return self.checklist_page(1);
+        }
+        if let Some(index) = self.selected_item {
+            let direction = if Self::rect(40, 1240, 568, 100).contains(x, y) {
+                -1
+            } else if Self::rect(656, 1240, 568, 100).contains(x, y) {
+                1
+            } else {
+                0
+            };
+            if direction != 0 {
+                if let Some((text, index)) = checklist::move_item(&note.text, index, direction) {
+                    if self.save_checklist(text) {
+                        self.selected_item = Some(index);
+                        self.checklist_page = index / CHECKLIST_ROWS;
+                    }
+                    return Change::Partial;
+                }
+                return Change::None;
+            }
+        }
+        for row in 0..CHECKLIST_ROWS {
+            let bounds = Self::checklist_row(row);
+            if !bounds.contains(x, y) {
+                continue;
+            }
+            let index = self.checklist_page * CHECKLIST_ROWS + row;
+            if index >= checklist::items(&note.text).len() {
+                return Change::None;
+            }
+            if x < (bounds.x + 130) as f32 {
+                if let Some(text) = checklist::toggle(&note.text, index) {
+                    self.save_checklist(text);
+                }
+            } else {
+                self.selected_item = Some(index);
+            }
+            return Change::Partial;
+        }
+        Change::None
     }
 
     fn list_page(&mut self, delta: isize) -> Change {
@@ -315,6 +574,11 @@ impl View {
                 };
             }
         } else {
+            if Self::rect(40, 1325, 328, 100).contains(x, y) {
+                self.templates = true;
+                self.notice.clear();
+                return Change::Full;
+            }
             for (rect, delta) in [
                 (Self::rect(40, 1470, 270, 100), -1),
                 (Self::rect(954, 1470, 270, 100), 1),
@@ -387,6 +651,22 @@ impl View {
                 return Change::Partial;
             }
         }
+        if Self::rect(552, 140, 220, 100).contains(x, y)
+            && self
+                .open
+                .as_ref()
+                .and_then(|(file, _)| self.notes.note(file))
+                .is_some_and(|note| !checklist::items(&note.text).is_empty())
+        {
+            let result = self.save_editor();
+            if !self.report(result) {
+                return Change::Partial;
+            }
+            self.checklist = true;
+            self.checklist_page = 0;
+            self.selected_item = None;
+            return Change::Full;
+        }
         let (file, editor) = self.open.as_mut().unwrap();
         if Self::rect(40, 140, 240, 100).contains(x, y) {
             let result = with_storage(|| self.notes.toggle_pin(file));
@@ -437,7 +717,11 @@ impl View {
 
 impl App for View {
     fn draw(&self, canvas: &mut Canvas) {
+        if self.templates {
+            return self.draw_templates(canvas);
+        }
         match &self.open {
+            Some((file, _)) if self.checklist => self.draw_checklist(canvas, file),
             Some((file, editor)) => self.draw_note(canvas, file, editor),
             None => self.draw_list(canvas),
         }
@@ -445,6 +729,14 @@ impl App for View {
 
     fn input(&mut self, input: Input) -> Change {
         match input {
+            Input::Tap(x, y) if self.templates => self.template_tap(x, y),
+            Input::PageBack if self.templates => {
+                self.templates = false;
+                Change::Full
+            }
+            Input::Tap(x, y) if self.checklist && self.open.is_some() => self.checklist_tap(x, y),
+            Input::PageBack if self.checklist => self.checklist_page(-1),
+            Input::PageForward if self.checklist => self.checklist_page(1),
             Input::Tap(x, y) if self.open.is_some() => self.note_tap(x, y),
             Input::Tap(x, y) => self.list_tap(x, y),
             Input::PageBack | Input::PageForward if !self.confirm_delete => {
@@ -490,6 +782,14 @@ impl App for View {
                     }
                 }
             }
+            self.checklist = self.checklist
+                && self
+                    .open
+                    .as_ref()
+                    .and_then(|(file, _)| fresh.note(file))
+                    .is_some_and(|note| !checklist::items(&note.text).is_empty());
+            self.checklist_page = 0;
+            self.selected_item = None;
             self.notes = fresh;
             let _ = self.notes.sync_pending_directory();
             self.page = 0;
@@ -510,6 +810,54 @@ mod tests {
         path::Path,
         time::{SystemTime, UNIX_EPOCH},
     };
+
+    #[test]
+    fn checklist_toggles_and_orders_on_disk_or_reloads_after_usb() -> io::Result<()> {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let folder = std::env::temp_dir().join(format!("primitive-notes-checklist-{stamp}"));
+        let mut notes = Notes::open(folder.clone())?;
+        let file = notes.create_text("Trip\n\n- [ ] Tickets\n- [ ] Camera".into())?;
+        let mut app = View::new(notes);
+        assert_eq!(app.input(Input::Tap(265.0, 340.0)), Change::Full);
+        assert!(app.checklist);
+        assert_eq!(app.input(Input::Tap(80.0, 355.0)), Change::Partial);
+        assert_eq!(app.input(Input::Tap(245.0, 500.0)), Change::Partial);
+        assert_eq!(app.input(Input::Tap(280.0, 1280.0)), Change::Partial);
+        assert_eq!(
+            fs::read_to_string(folder.join(&file))?,
+            "Trip\n\n- [ ] Camera\n- [x] Tickets"
+        );
+        app.save()?;
+        fs::write(folder.join(&file), "Changed over USB")?;
+        app.storage_returned()?;
+        assert!(!app.checklist);
+        assert_eq!(
+            app.open.as_ref().unwrap().1.editor.string(),
+            "Changed over USB"
+        );
+        fs::remove_dir_all(folder)
+    }
+
+    #[test]
+    fn templates_create_notes_in_the_existing_plain_text_library() -> io::Result<()> {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let folder = std::env::temp_dir().join(format!("primitive-notes-template-{stamp}"));
+        let mut app = View::new(Notes::open(folder.clone())?);
+        assert_eq!(app.input(Input::Tap(215.0, 1365.0)), Change::Full);
+        assert_eq!(app.input(Input::Tap(240.0, 515.0)), Change::Full);
+        let file = &app.open.as_ref().unwrap().0;
+        assert_eq!(
+            fs::read_to_string(folder.join(file))?,
+            checklist::READING_JOURNAL_TEMPLATE
+        );
+        fs::remove_dir_all(folder)
+    }
 
     #[test]
     fn eject_reloads_host_changes_without_overwriting_an_open_draft() -> io::Result<()> {
