@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::io;
 
 use notes_core::Notes;
-use primitive_app::{App, Change};
+use primitive_app::{with_storage, App, Change};
 use primitive_ui::{
     back_button, header, keyboard_key, screen_rect, Canvas, Editor, Input, Layout, Press, Rect,
     TextStyle, BODY, CAPTION,
@@ -270,7 +270,7 @@ impl View {
             return Change::Exit;
         }
         if Self::rect(886, 170, 338, 100).contains(x, y) {
-            let file = self.notes.create();
+            let file = with_storage(|| self.notes.create());
             return match file {
                 Ok(file) => self.view_note(file),
                 Err(error) => {
@@ -307,7 +307,7 @@ impl View {
                 }
             }
             if self.notes.can_undo() && Self::rect(390, 1325, 484, 100).contains(x, y) {
-                let result = self.notes.undo();
+                let result = with_storage(|| self.notes.undo());
                 if self.report(result) {
                     self.notice = "Note restored.".into();
                 }
@@ -334,7 +334,7 @@ impl View {
                     return Change::Full;
                 }
                 if let Some((file, _)) = &self.open {
-                    let result = self.notes.delete(file);
+                    let result = with_storage(|| self.notes.delete(file));
                     if self.report(result) {
                         self.open = None;
                         self.page = 0;
@@ -372,7 +372,7 @@ impl View {
         }
         let (file, editor) = self.open.as_mut().unwrap();
         if Self::rect(40, 140, 240, 100).contains(x, y) {
-            let result = self.notes.toggle_pin(file);
+            let result = with_storage(|| self.notes.toggle_pin(file));
             self.report(result);
             return Change::Partial;
         }
@@ -446,9 +446,40 @@ impl App for View {
 
     fn save(&mut self) -> io::Result<()> {
         if let Some((file, editor)) = &self.open {
-            self.notes.edit(file, editor.editor.string())?;
+            with_storage(|| self.notes.edit(file, editor.editor.string()))?;
         }
         Ok(())
+    }
+
+    fn storage_returned(&mut self) -> io::Result<()> {
+        let result = with_storage(|| {
+            let mut fresh = self.notes.refreshed()?;
+            if let Some((file, editor)) = &mut self.open {
+                let before = self.notes.note(file).map(|note| note.text.as_str());
+                let after = fresh.note(file).map(|note| note.text.as_str());
+                if before != after {
+                    let draft = editor.editor.string();
+                    if before != Some(draft.as_str()) && after != Some(draft.as_str()) {
+                        *file = fresh.create_text(draft)?;
+                        self.notice =
+                            "Saved your draft as a new note. The original changed over USB.".into();
+                    } else if let Some(text) = after {
+                        *editor = primitive_ui::editor::Multiline::new(text, 100_000);
+                        self.hit_lines.get_mut().clear();
+                    } else {
+                        self.open = None;
+                        self.editing = false;
+                    }
+                }
+            }
+            self.notes = fresh;
+            self.page = 0;
+            Ok(())
+        });
+        if let Err(error) = &result {
+            self.notice = format!("Could not reload notes. {error}");
+        }
+        result
     }
 }
 
@@ -460,6 +491,32 @@ mod tests {
         path::Path,
         time::{SystemTime, UNIX_EPOCH},
     };
+
+    #[test]
+    fn eject_reloads_host_changes_without_overwriting_an_open_draft() -> io::Result<()> {
+        let folder =
+            std::env::temp_dir().join(format!("primitive-notes-usb-{}", std::process::id()));
+        let mut notes = Notes::open(folder.clone())?;
+        let file = notes.create_text("original".into())?;
+        let mut view = View::new(notes);
+        assert_eq!(view.view_note(file.clone()), Change::Full);
+        view.open.as_mut().unwrap().1 =
+            primitive_ui::editor::Multiline::new("Kindle draft", 100_000);
+        fs::write(folder.join(&file), "macOS edit")?;
+        fs::write(folder.join("Copied.txt"), "copied over USB")?;
+        assert_eq!(view.save().unwrap_err().kind(), io::ErrorKind::WouldBlock);
+        view.storage_returned()?;
+        let (draft_file, editor) = view.open.as_ref().unwrap();
+        assert_ne!(draft_file, &file);
+        assert_eq!(editor.editor.string(), "Kindle draft");
+        assert_eq!(fs::read_to_string(folder.join(draft_file))?, "Kindle draft");
+        assert_eq!(fs::read_to_string(folder.join(&file))?, "macOS edit");
+        assert_eq!(
+            view.notes.note("Copied.txt").unwrap().text,
+            "copied over USB"
+        );
+        fs::remove_dir_all(folder)
+    }
 
     #[test]
     fn caret_hit_targets_follow_the_drawn_width_of_narrow_and_wide_letters() -> io::Result<()> {

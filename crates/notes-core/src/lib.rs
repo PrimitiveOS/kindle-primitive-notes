@@ -96,6 +96,15 @@ impl Notes {
         self.entries.iter().find(|note| note.file == file)
     }
 
+    pub fn refreshed(&self) -> io::Result<Self> {
+        let mut fresh = Self::open(self.dir.clone())?;
+        fresh.deleted = self
+            .deleted
+            .clone()
+            .filter(|note| fresh.note(&note.file).is_none());
+        Ok(fresh)
+    }
+
     fn sort(&mut self) {
         self.entries.sort_by(|a, b| {
             b.pinned
@@ -106,19 +115,32 @@ impl Notes {
     }
 
     pub fn create(&mut self) -> io::Result<String> {
+        self.create_text(String::new())
+    }
+
+    pub fn create_text(&mut self, text: String) -> io::Result<String> {
+        use std::io::Write;
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
         let file = format!("note-{timestamp}.txt");
-        OpenOptions::new()
+        let path = self.dir.join(&file);
+        let mut output = OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(self.dir.join(&file))?
-            .sync_all()?;
+            .open(&path)?;
+        if let Err(error) = output
+            .write_all(text.as_bytes())
+            .and_then(|()| output.sync_all())
+        {
+            drop(output);
+            let _ = fs::remove_file(path);
+            return Err(error);
+        }
         self.entries.push(Note {
             file: file.clone(),
-            text: String::new(),
+            text,
             pinned: false,
             modified: SystemTime::now(),
         });
@@ -133,7 +155,14 @@ impl Notes {
             .find(|note| note.file == file)
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "note is gone"))?;
         if note.text != text {
-            replace(&self.dir.join(file), text.as_bytes())?;
+            let path = self.dir.join(file);
+            if fs::read(&path)? != note.text.as_bytes() {
+                return Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "This note changed outside the app. The draft is still open.",
+                ));
+            }
+            replace(&path, text.as_bytes())?;
             note.text = text;
             note.modified = SystemTime::now();
             self.sort();
