@@ -1,6 +1,6 @@
 <div align="center">
 
-# Primitive Notes
+# Notes
 
 **A plain-text notebook for Kindle e-readers.**
 
@@ -34,7 +34,7 @@ a UTF-8 text file in `/mnt/us/notes/`, ready to copy over USB.
 ## Quick start
 
 Copy the `notes` and `documents` folders from the local ARMHF package to your Kindle over USB, then eject and open
-**Primitive Notes** from Primitive Launcher. The app uses the fonts installed by Launcher. [Install guide](INSTALL.md)
+**Notes** from Primitive Launcher. The app uses the fonts installed by Launcher. [Install guide](INSTALL.md)
 
 ## Status
 

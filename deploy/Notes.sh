@@ -1,5 +1,5 @@
 #!/bin/sh
-# Name: Primitive Notes
+# Name: Notes
 # Author: Primitive AI
 # DontUseFBInk
 # PrimitiveUSBLease

@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "primitive-notes",
   "dir": "notes",
-  "name": "Primitive Notes",
+  "name": "Notes",
   "subtitle": "Write and find plain-text notes",
   "developer": { "name": "Primitive AI" },
   "categories": ["productivity"],
