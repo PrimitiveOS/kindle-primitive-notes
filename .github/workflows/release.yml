@@ -12,5 +12,5 @@ jobs:
       dir: notes
       binary-crate: notes-kindle
       docs-licence-file: LICENSE-DOCS
-      sibling-tools-ref: 779145c93a65b2fb8c104485af6489a8ef565de6
+      sibling-tools-ref: 3aea0810609c9b9fd19aea689c6990f017de8476
       sibling-launcher-ref: 55d034c0101e51f84ca9050fe9cd0ee611699d68
