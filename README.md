@@ -2,16 +2,22 @@
 
 # Notes
 
-**A plain-text notebook for Kindle e-readers.**
+**Plain-text notes and checklists**
 
-[Install guide](INSTALL.md) · [Device notes](docs/device-notes.md) · [Changelog](CHANGELOG.md)
+[![Release](https://img.shields.io/github/v/release/PrimitiveOS/kindle-primitive-notes?label=release)](https://github.com/PrimitiveOS/kindle-primitive-notes/releases) [![Licence: PolyForm-Noncommercial-1.0.0](https://img.shields.io/badge/licence-PolyForm--Noncommercial--1.0.0-blue)](LICENSE) [![Store downloads](https://img.shields.io/badge/Store%20downloads-55-brightgreen)](https://primitiveos.github.io/kindle-primitive-catalog/v1/index.json)
+
+[**Download**](https://github.com/PrimitiveOS/kindle-primitive-notes/releases/latest) · [**Install guide**](INSTALL.md) · [**Changelog**](CHANGELOG.md)
 
 </div>
 
 ---
 
-Write notes with the on-screen keyboard, search their contents, and pin the ones you use most. Each note is stored as
-a UTF-8 text file in `/mnt/us/notes/`, ready to copy over USB. Open **Templates** to start a checklist or reading journal.
+Write, pin, and search plain-text notes. Check items off and reorder them in Checklist view, or start a reading journal from Templates. Your notes stay as UTF-8 text files.
+
+## Quick start
+
+After setting up PrimitiveOS, open **Store** from Primitive Launcher. Choose **Notes** under **Apps**,
+tap **Get**, and open it from the Launcher grid. The [install guide](INSTALL.md) also covers the standalone USB package.
 
 ## Screenshots
 
@@ -35,25 +41,6 @@ a UTF-8 text file in `/mnt/us/notes/`, ready to copy over USB. Open **Templates*
 - Every edit is saved. Delete offers Undo from the notes list.
 - With a matching Launcher, Notes refreshes the folder after USB eject and preserves conflicting drafts as separate notes.
 
-## Checklists and reading journals
-
-- Open **Templates** and choose **Checklist** to start a list. Notes also detects rows marked with `- [ ]` or `- [x]`
-  in existing text files.
-- Tap a checkbox to finish an item. Tap its label to select it, then choose **Move up** or **Move down**. **Edit text**
-  opens the normal editor so you can write freely.
-- Choose **Reading journal** for a note with Book, Page, Quote and Takeaway fields.
-
-## Quick start
-
-After setting up PrimitiveOS, open **Store** from Primitive Launcher. Choose **Notes** under **Apps**,
-tap **Get**, and open it from the Launcher grid. The [install guide](INSTALL.md) also covers local USB testing.
-
-## Status
-
-Version 0.1.1 passed desktop simulation and local ARMHF package checks on the Mac. Version 0.1.0 was checked on an ARMHF Kindle Oasis 3 running firmware
-5.18.2, Notes opened from Launcher, opened and dismissed the search keyboard, and returned to Launcher.
-USB eject and sleep and wake checks are pending. [Device notes](docs/device-notes.md)
-
 ## Develop locally
 
 Keep `doannt-kindle-tools` and `doannt-kindle-launcher` next to this checkout. The desktop command writes sample PNGs
@@ -63,6 +50,23 @@ to `build/previews`.
 cargo test --offline --locked --workspace
 cargo run --offline --locked -p notes-desktop -- build/previews
 ```
+
+## Status
+
+| Device | Status |
+|---|---|
+| Kindle Oasis 3 (1264 × 1680, firmware 5.18.2) | Tested on hardware |
+
+**Current version: 0.1.2.** Changes are in [CHANGELOG.md](CHANGELOG.md).
+
+## Downloads
+
+**55 downloads** from Store, as of 2026-11-21. Store shows the same count on the app page.
+The count is GitHub downloads of this app's release packages, from the [Store catalog](https://primitiveos.github.io/kindle-primitive-catalog/v1/index.json).
+
+## Documentation
+
+[Install guide](INSTALL.md) · [Changelog](CHANGELOG.md) · [Device notes](docs/device-notes.md)
 
 ## Licence
 
