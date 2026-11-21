@@ -170,8 +170,9 @@ impl View {
         header(canvas, "Notes", "Exit");
         let query = self.search.string();
         let box_ = Self::rect(40, 170, 824, 100);
+        // A tap reverses the field, as the kit's controls do.
         let pressed = canvas.control_pressed(box_, false);
-        canvas.panel(box_, 22, 2, if pressed { 220 } else { 255 });
+        canvas.panel(box_, 22, 2, if pressed { 0 } else { 255 });
         canvas.text(
             box_.inset(18),
             if query.is_empty() {
@@ -179,7 +180,7 @@ impl View {
             } else {
                 &query
             },
-            BODY,
+            BODY.ink(if pressed { 255 } else { 0 }),
         );
         canvas.button(Self::rect(886, 170, 338, 100), "New note", true, false);
         let mut found = false;
@@ -193,13 +194,17 @@ impl View {
             found = true;
             let row = Self::rect(40, 304 + i as i32 * 126, 1184, 112);
             let pressed = canvas.control_pressed(row, false);
-            canvas.panel(row, 22, 2, if pressed { 220 } else { 255 });
+            canvas.panel(row, 22, 2, if pressed { 0 } else { 255 });
             let title = if note.pinned {
                 format!("Pinned · {}", note.title())
             } else {
                 note.title().to_owned()
             };
-            canvas.text(row.inset(22), &title, TextStyle::new(40).bold());
+            canvas.text(
+                row.inset(22),
+                &title,
+                TextStyle::new(40).bold().ink(if pressed { 255 } else { 0 }),
+            );
         }
         if !found {
             canvas.text(
@@ -371,9 +376,9 @@ impl View {
             let text = Rect::new(row.x + 138, row.y + 18, row.w - 150, row.h - 36);
             let pressed = canvas.control_pressed(text, false);
             if pressed {
-                canvas.panel(text, 16, 2, 220);
+                canvas.panel(text, 16, 2, 0);
             }
-            canvas.text(text.inset(10), label, BODY.lines(2));
+            canvas.text(text.inset(10), label, BODY.lines(2).ink(if pressed { 255 } else { 0 }));
         }
         if let Some(index) = self.selected_item {
             if index > 0 {
