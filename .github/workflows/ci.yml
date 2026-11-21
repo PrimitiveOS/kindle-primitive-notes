@@ -26,6 +26,15 @@ jobs:
           persist-credentials: false
       - name: Make the app kit available as a sibling folder
         run: ln -sT "$GITHUB_WORKSPACE/.tools-source" "$GITHUB_WORKSPACE/../doannt-kindle-tools"
+      - name: Check out the launcher's fonts
+        uses: actions/checkout@v5
+        with:
+          repository: PrimitiveOS/kindle-primitive-launcher
+          ref: 55d034c0101e51f84ca9050fe9cd0ee611699d68
+          path: .launcher-source
+          persist-credentials: false
+      - name: Make the launcher available as a sibling folder
+        run: ln -sT "$GITHUB_WORKSPACE/.launcher-source" "$GITHUB_WORKSPACE/../doannt-kindle-launcher"
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Unit tests
