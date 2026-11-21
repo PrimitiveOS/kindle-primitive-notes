@@ -167,7 +167,7 @@ impl View {
     }
 
     fn draw_list(&self, canvas: &mut Canvas) {
-        header(canvas, "Notes", "Done");
+        header(canvas, "Notes", "Exit");
         let query = self.search.string();
         let box_ = Self::rect(40, 170, 824, 100);
         let pressed = canvas.control_pressed(box_, false);
